@@ -1,6 +1,6 @@
 ---
 title: "EDLD 610 Winter 2020 Lab 4"
-author: "Jim Wright and Claire Zhang"
+author: "Jim Wright"
 date: "2/5/2020"
 output: html_document
 toc: true
@@ -44,10 +44,209 @@ library(tidyverse)
 library(rio)
 library(here)
 
+
+theme_set(theme_minimal())
+
 honey <- import(here("data", "honeyproduction.csv"),
                setclass = "tbl_df")
+
+state <- import(here("data", "lab4_data.csv"),
+                setclass = "tbl_df") %>% 
+                janitor::clean_names() %>% 
+                rename(state_name = state,
+                state = state_code)
+
+
+# devtools::install_github("wilkelab/cowplot")
+# install.packages("colorspace", repos = "http://R-Forge.R-project.org")
+# devtools::install_github("clauswilke/colorblindr")
+# 
+library(colorblindr)
+
+
+
+library(gghighlight)
+
+```
+
+#Promt 1: Visualize the total production of honey across years by state. Use color to highlight the west coast (Washington, Oregon, and California).
+```{r prompt 1, include=TRUE}
+
+head(honey) 
+
+ggplot(honey, aes(year, totalprod, group = state)) +
+  geom_line() 
+
+
+
+ggplot(honey, aes(year, totalprod, color = state)) +
+  geom_line(data = filter(honey, state == "WA" | state == "OR" | state == "CA")) +
+  gghighlight()
+
+west_coast <- c("WA", "OR", "CA")
+
+state_plot1 <- ggplot(honey, aes(year, totalprod, color = state)) +
+  geom_line() +
+  gghighlight(state %in% west_coast) 
+  
+
+ggplot(honey, aes(year, totalprod, color = state)) +
+  geom_line() +
+  gghighlight(state %in% west_coast) +
+  facet_wrap(~state)
+```
+
+
+#2. Reproduce the plot according three different kinds of color blindness, as well as a desaturated version.
+```{r prompt 2, include=TRUE}
+
+colorblindr::cvd_grid(state_plot1)
 
 
 ```
 
+#3. Reproduce the plot using a color blind safe pallette.
+```{r, prompt 3, include=TRUE}
+Okabe <- ggplot(honey, aes(year, totalprod, color = state)) +
+  geom_line() +
+  gghighlight(state %in% west_coast) +
+  scale_color_OkabeIto() +
+  labs(title = "OkabeIto")
 
+colorblindr::cvd_grid(Okabe)
+
+viridis <- ggplot(honey, aes(year, totalprod, color = state)) +
+  geom_line() +
+  gghighlight(state %in% west_coast) +
+  scale_color_viridis_d() +
+  labs(title = "viridis_d")
+
+colorblindr::cvd_grid(viridis)
+
+```
+
+#4. Download the file here denoting the region and division of each state.
+    - Join the file with your honey file.
+    - Produce a bar plot displaying the average honey for each state across years.
+    - Use color to highlight the region of the country the state is from.
+    - Note patterns you notice.
+```{r prompt 4, include=TRUE}
+head(honey)
+head(state)
+
+new_honey <- left_join(honey, state)
+
+head(new_honey)
+
+per_year <- new_honey %>% 
+  group_by(state, region) %>% 
+  summarize(mean_honey = mean(totalprod))
+
+head(per_year)
+
+ggplot(per_year, aes(fct_reorder(state, mean_honey), mean_honey)) +
+  geom_col(aes(fill = region), 
+           color = "black") +
+  coord_flip() + 
+  scale_fill_OkabeIto() +
+  labs(x = "Mean Honey Produced",
+       y = "State",
+       title = "Mean Honey Produced Across the 50 United States")
+
+```
+## The Dakotas are the states where the majority of honey is produced, and the midwest region is the region with the most honey produced. I question the classification of Montana as a West region state and would argue it belongs in the Midwest, which would further burgeon the production of Midwest honey as a whole. 
+
+
+#5. Create a heatmap displaying the average honey production across years by region.
+```{r prompt 5, include=TRUE}
+
+heat_map <- new_honey %>% 
+  group_by(year, region) %>% 
+  summarize(mean_honey = mean(totalprod/1e7))
+
+ggplot(heat_map, aes(year, fct_reorder(region, mean_honey))) +
+  geom_tile(aes(fill = mean_honey),
+            color = "white") +
+  scale_fill_viridis_c(option = "inferno") +
+  coord_fixed() +
+  labs(x = "Year",
+       y = "Region",
+       fill = "Average Honey Production") +
+  theme(legend.position = "top",
+        legend.direction = "horizontal",
+        legend.key.size = unit(1.0, 'cm'),
+        legend.key.height = unit(0.5,"cm"),
+        legend.title=element_text(size=10))
+```
+
+#6. Create at least one more plot of your choosing using color to distinguish, represent data values, or highlight. If you are interested in producing maps, I would recommend joining the data with the output from ggplot2::map_data("state"). But be careful with keys and that you don’t end up with a many-to-many join. See here for additional help.
+```{r prompt 6, include=TRUE}
+
+library(ggmap)
+library(maps)
+library(mapdata)
+
+head(new_honey)
+
+ggplot(new_honey, aes(fct_reorder(state, priceperlb), priceperlb)) +
+  geom_col(aes(fill = region)) +
+  coord_flip() + 
+  scale_fill_OkabeIto() +
+  labs(x = "Price",
+       y = "State",
+       title = "Price per Pound of Honey Across US States")
+
+
+states <- map_data("state") %>% 
+  rename(state_name = region) %>% 
+  mutate(state_name = stringr::str_to_title(state_name))
+
+
+head(states)
+
+ggplot(data = states) + 
+  geom_polygon(aes(x = long, y = lat, fill = state_name, group = group), color = "white") + 
+  coord_fixed(1.3) +
+  guides(fill=FALSE)
+
+head(new_honey)
+
+honey_map <- full_join(new_honey, states)
+
+head(honey_map)
+
+ggplot(honey_map) +
+  geom_polygon(aes(x = long,
+                   y = lat, 
+                   fill = totalprod, 
+                   group = group), color = "white") +
+  scale_fill_viridis_c(option = "magma") +
+  coord_fixed(1.3) +
+  labs(x = "",
+       y = "",
+       fill = "Total Honey Produced (lbs)") +
+   theme(legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.key.size = unit(1.0, 'cm'),
+        legend.key.height = unit(0.5,"cm"),
+        legend.title=element_text(size=10))
+
+
+ggplot(honey_map) +
+  geom_polygon(aes(x = long,
+                   y = lat, 
+                   fill = priceperlb, 
+                   group = group), color = "white") +
+  scale_fill_viridis_c(option = "plasma") +
+  coord_fixed(1.3) +
+  labs(x = "",
+       y = "",
+       fill = "Honey Price per Pound") +
+   theme(legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.key.size = unit(1.0, 'cm'),
+        legend.key.height = unit(0.5,"cm"),
+        legend.title=element_text(size=10))
+
+
+```
